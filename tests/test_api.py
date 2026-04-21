@@ -61,3 +61,30 @@ def test_health_returns_ok(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+@pytest.fixture
+def client_404():
+    mock_orchestrator = MagicMock()
+    mock_orchestrator.chat = AsyncMock(side_effect=ValueError("Conversation not found: bad-id"))
+    mock_orchestrator.get_messages = MagicMock(return_value=[])
+    mock_orchestrator.store = MagicMock()
+    mock_orchestrator.store.get_conversation = MagicMock(return_value=None)
+
+    from api.main import create_app
+    app = create_app(orchestrator=mock_orchestrator)
+    return TestClient(app)
+
+
+def test_chat_unknown_conversation_id_returns_404(client_404):
+    response = client_404.post(
+        "/api/chat",
+        json={"message": "x", "conversation_id": "bad-id"},
+    )
+    assert response.status_code == 404
+    assert "Conversation not found" in response.json()["detail"]
+
+
+def test_get_messages_unknown_conversation_returns_404(client_404):
+    response = client_404.get("/api/conversations/bad-id/messages")
+    assert response.status_code == 404

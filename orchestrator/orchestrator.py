@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from typing import Optional
+from pydantic import ValidationError
 from api.models import ChatResponse, MessageRecord, SmokeAlert
 from orchestrator.conversation import ConversationStore
 from agents.supervisor import SupervisorAgent
@@ -25,7 +26,8 @@ class AgentOrchestrator:
         else:
             conv = self.store.create_conversation()
 
-        self.store.add_message(conv.id, role="user", content=message)
+        full_message = f"[Salesforce case_id: {case_id}]\n\n{message}" if case_id else message
+        self.store.add_message(conv.id, role="user", content=full_message)
 
         history = self._build_history(conv.id)
         response_text = await self.supervisor.run(history)
@@ -69,6 +71,6 @@ class AgentOrchestrator:
             data, _ = json.JSONDecoder().raw_decode(response_text, start)
             if data.get("alert_type") == "platform_wide_incident":
                 return SmokeAlert(**data)
-        except (json.JSONDecodeError, KeyError, TypeError):
+        except (json.JSONDecodeError, KeyError, TypeError, ValidationError):
             pass
         return None

@@ -49,8 +49,10 @@ def create_app(orchestrator: Optional[AgentOrchestrator] = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
 
-    @app.get("/api/conversations/{conversation_id}/messages")
+    @app.get("/api/conversations/{conversation_id}/messages", response_model=list[MessageRecord])
     def get_messages(conversation_id: str):
+        if _orchestrator.store.get_conversation(conversation_id) is None:
+            raise HTTPException(status_code=404, detail=f"Conversation not found: {conversation_id}")
         return _orchestrator.get_messages(conversation_id)
 
     @app.get("/health")
