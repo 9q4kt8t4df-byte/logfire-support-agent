@@ -1,4 +1,5 @@
 # tests/test_agents.py
+from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import anthropic
@@ -6,6 +7,8 @@ from agents.base import BaseAgent
 from agents.investigator import InvestigatorAgent
 from agents.smoke_detector import SmokeDetectorAgent
 from agents.supervisor import SupervisorAgent
+
+_KNOWLEDGE_DIR = str(Path(__file__).parent.parent / "knowledge")
 
 
 class ConcreteAgent(BaseAgent):
@@ -78,7 +81,7 @@ def investigator():
     from tools.logfire_tool import LogfireTool
     from tools.knowledge_tool import KnowledgeTool
     logfire = LogfireTool(token="test-token")
-    knowledge = KnowledgeTool(knowledge_dir="knowledge")
+    knowledge = KnowledgeTool(knowledge_dir=_KNOWLEDGE_DIR)
     return InvestigatorAgent(logfire_tool=logfire, knowledge_tool=knowledge)
 
 
@@ -122,7 +125,7 @@ def supervisor():
     from tools.cross_tenant import CrossTenantTool
 
     logfire = LogfireTool(token="test-token")
-    knowledge = KnowledgeTool(knowledge_dir="knowledge")
+    knowledge = KnowledgeTool(knowledge_dir=_KNOWLEDGE_DIR)
     workato = WorkatoTool()
     cross_tenant = CrossTenantTool(logfire_tool=logfire)
     investigator = InvestigatorAgent(logfire_tool=logfire, knowledge_tool=knowledge)

@@ -14,7 +14,6 @@ class BaseAgent:
         self.agent_id = agent_id
         self.config = config
         self.client = anthropic.AsyncAnthropic(api_key=cfg.ANTHROPIC_API_KEY)
-        self.tools_list = tools
         self.tool_map: dict = {}
         self.tools_used: list = []
 

@@ -28,7 +28,7 @@ class WorkatoTool:
                 response.raise_for_status()
                 return response.text
         except httpx.HTTPStatusError as e:
-            return f"[Workato error — HTTP {e.response.status_code}: {e.response.text[:200]}]"
+            return f"[Workato error — HTTP {e.response.status_code}]"
         except httpx.RequestError as e:
             return f"[Workato unreachable — {type(e).__name__}: {e}]"
 
@@ -70,7 +70,7 @@ class WorkatoTool:
                 response.raise_for_status()
                 return response.text
         except httpx.HTTPStatusError as e:
-            return f"[Workato error — HTTP {e.response.status_code}: {e.response.text[:200]}]"
+            return f"[Workato error — HTTP {e.response.status_code}]"
         except httpx.RequestError as e:
             return f"[Workato unreachable — {type(e).__name__}: {e}]"
 

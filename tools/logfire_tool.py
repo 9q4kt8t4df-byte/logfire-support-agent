@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-_ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z?$")
+_ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 class LogfireTool:
@@ -18,7 +18,7 @@ class LogfireTool:
     @staticmethod
     def _sanitize(value: str) -> str:
         """Reject values containing SQL metacharacters to prevent injection."""
-        for c in ("'", '"', ";", "--", "/*", "*/"):
+        for c in ("'", '"', ";", "--", "/*", "*/", "%", "_", "\\", "\n", "\r"):
             if c in value:
                 raise ValueError(f"Invalid characters in query parameter: {value!r}")
         return value
@@ -33,9 +33,10 @@ class LogfireTool:
         """Open a fresh MCP connection, execute SQL, return result as string."""
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
+        import os
         server_params = StdioServerParameters(
             command="logfire-mcp",
-            args=["--read-token", self.token],
+            env={**os.environ, "LOGFIRE_TOKEN": self.token},
         )
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
