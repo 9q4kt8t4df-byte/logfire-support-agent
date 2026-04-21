@@ -68,3 +68,45 @@ async def test_run_calls_tool_and_continues(agent):
 
     assert result == "Done after tool call."
     mock_tool.call.assert_called_once_with("fake_tool", {"param": "value"})
+
+from agents.investigator import InvestigatorAgent
+from agents.smoke_detector import SmokeDetectorAgent
+
+
+@pytest.fixture
+def investigator():
+    from tools.logfire_tool import LogfireTool
+    from tools.knowledge_tool import KnowledgeTool
+    logfire = LogfireTool(token="test-token")
+    knowledge = KnowledgeTool(knowledge_dir="knowledge")
+    return InvestigatorAgent(logfire_tool=logfire, knowledge_tool=knowledge)
+
+
+@pytest.fixture
+def smoke_detector():
+    from tools.logfire_tool import LogfireTool
+    from tools.cross_tenant import CrossTenantTool
+    logfire = LogfireTool(token="test-token")
+    cross_tenant = CrossTenantTool(logfire_tool=logfire)
+    return SmokeDetectorAgent(logfire_tool=logfire, cross_tenant_tool=cross_tenant)
+
+
+@pytest.mark.asyncio
+async def test_investigator_has_correct_tools(investigator):
+    tool_names = [t["name"] for t in investigator.tool_definitions]
+    assert "query_traces" in tool_names
+    assert "get_trace_detail" in tool_names
+    assert "search_known_issues" in tool_names
+    # Workato tools must NOT be present
+    assert "create_tfs_ticket" not in tool_names
+    assert "delegate_to_agent" not in tool_names
+
+
+@pytest.mark.asyncio
+async def test_smoke_detector_has_correct_tools(smoke_detector):
+    tool_names = [t["name"] for t in smoke_detector.tool_definitions]
+    assert "find_pattern_across_tenants" in tool_names
+    assert "query_traces" in tool_names
+    # Must NOT have Workato or delegation tools
+    assert "create_tfs_ticket" not in tool_names
+    assert "delegate_to_agent" not in tool_names
