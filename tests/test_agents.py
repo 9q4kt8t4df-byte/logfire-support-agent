@@ -169,3 +169,14 @@ async def test_supervisor_delegation_calls_sub_agent(supervisor):
 async def test_supervisor_delegation_rejects_unknown_agent(supervisor):
     result = await supervisor._delegate("unknown-agent", "some task")
     assert "not found" in result.lower() or "unknown" in result.lower()
+
+
+def test_smoke_threshold_appears_in_supervisor_prompt():
+    """SMOKE_THRESHOLD from config is injected into the supervisor system prompt."""
+    import config
+    threshold_str = str(config.SMOKE_THRESHOLD)
+    prompt = config.AGENTS["support-supervisor"]["system_prompt"]
+    assert threshold_str in prompt, (
+        f"SMOKE_THRESHOLD ({threshold_str}) not found in supervisor system_prompt. "
+        "Did you forget to inject it with an f-string?"
+    )

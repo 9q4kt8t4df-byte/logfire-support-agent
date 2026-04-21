@@ -8,6 +8,7 @@ LOGFIRE_TOKEN = os.environ["LOGFIRE_TOKEN"]
 WORKATO_WEBHOOK_SF_READ = os.getenv("WORKATO_WEBHOOK_SF_READ", "")
 WORKATO_WEBHOOK_TFS_WRITE = os.getenv("WORKATO_WEBHOOK_TFS_WRITE", "")
 WORKATO_API_KEY = os.getenv("WORKATO_API_KEY", "")
+SMOKE_THRESHOLD = int(os.getenv("SMOKE_THRESHOLD", "100"))
 
 AGENTS = {
     "support-supervisor": {
@@ -18,8 +19,8 @@ AGENTS = {
             "1. If a case_id is provided, call read_salesforce_case to fetch context.\n"
             "2. Call get_service_error_rate for a quick surface scan of the affected tenant.\n"
             "3. Delegate deep investigation to logfire-investigator with the tenant_id, symptom, and time range.\n"
-            "4. If the root cause suggests an external system (MS throttling, connector failure, auth outage) "
-            "OR if error_count > 100, ALSO delegate to smoke-detector to check cross-tenant impact.\n"
+            f"4. If the root cause suggests an external system (MS throttling, connector failure, auth outage) "
+            f"OR if error_count > {SMOKE_THRESHOLD}, ALSO delegate to smoke-detector to check cross-tenant impact.\n"
             "5. Synthesise all findings into a clear escalation summary.\n\n"
             "Always identify: root_cause, affected_service, first_error_utc, error_count, isolated vs platform-wide.\n"
             "Before creating a TFS ticket, present the full ticket body to the engineer and ask for confirmation.\n\n"
