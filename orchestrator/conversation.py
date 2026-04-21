@@ -1,12 +1,24 @@
 import uuid
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timezone
 from typing import Optional
 from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+
+
+# Enable FK enforcement for all SQLite connections
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 class Conversation(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Message(SQLModel, table=True):
@@ -14,7 +26,7 @@ class Message(SQLModel, table=True):
     conversation_id: str = Field(foreign_key="conversation.id", index=True)
     role: str
     content: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ConversationStore:
