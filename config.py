@@ -8,7 +8,11 @@ LOGFIRE_TOKEN = os.environ["LOGFIRE_TOKEN"]
 WORKATO_WEBHOOK_SF_READ = os.getenv("WORKATO_WEBHOOK_SF_READ", "")
 WORKATO_WEBHOOK_TFS_WRITE = os.getenv("WORKATO_WEBHOOK_TFS_WRITE", "")
 WORKATO_API_KEY = os.getenv("WORKATO_API_KEY", "")
-SMOKE_THRESHOLD = int(os.getenv("SMOKE_THRESHOLD", "100"))
+_smoke_threshold_raw = os.getenv("SMOKE_THRESHOLD", "100")
+try:
+    SMOKE_THRESHOLD = int(_smoke_threshold_raw)
+except ValueError:
+    raise ValueError(f"SMOKE_THRESHOLD must be an integer, got: {_smoke_threshold_raw!r}")
 
 AGENTS = {
     "support-supervisor": {
