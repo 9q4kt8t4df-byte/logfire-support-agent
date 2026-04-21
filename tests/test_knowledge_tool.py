@@ -40,3 +40,20 @@ def test_get_runbook_returns_content(tool):
 def test_get_runbook_returns_not_found_message(tool):
     content = tool.get_runbook("nonexistent_runbook_xyz")
     assert "not found" in content.lower()
+
+
+def test_invalid_knowledge_dir_raises():
+    with pytest.raises(ValueError, match="does not exist"):
+        KnowledgeTool(knowledge_dir="/nonexistent/path/xyz")
+
+
+@pytest.mark.asyncio
+async def test_call_missing_query_returns_error(tool):
+    result = await tool.call("search_known_issues", {})
+    assert "required" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_call_missing_topic_returns_error(tool):
+    result = await tool.call("get_runbook", {})
+    assert "required" in result.lower()

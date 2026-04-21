@@ -1,9 +1,13 @@
 from pathlib import Path
 
+_DEFAULT_KNOWLEDGE_DIR = Path(__file__).parent.parent / "knowledge"
+
 
 class KnowledgeTool:
-    def __init__(self, knowledge_dir: str = "knowledge"):
+    def __init__(self, knowledge_dir: str = str(_DEFAULT_KNOWLEDGE_DIR)):
         self.knowledge_dir = Path(knowledge_dir)
+        if not self.knowledge_dir.is_dir():
+            raise ValueError(f"knowledge_dir does not exist or is not a directory: {knowledge_dir}")
 
     def search_known_issues(self, query: str) -> list[str]:
         """Keyword search across all .md files. Returns matching file contents."""
@@ -60,10 +64,14 @@ class KnowledgeTool:
     async def call(self, tool_name: str, tool_input: dict) -> str:
         """Dispatch a tool call by name. Returns result as string."""
         if tool_name == "search_known_issues":
+            if "query" not in tool_input:
+                return "Error: 'query' parameter is required."
             results = self.search_known_issues(tool_input["query"])
             if not results:
                 return "No matching known issues found."
             return "\n\n---\n\n".join(results)
         if tool_name == "get_runbook":
+            if "topic" not in tool_input:
+                return "Error: 'topic' parameter is required."
             return self.get_runbook(tool_input["topic"])
         return f"Unknown tool: {tool_name}"
