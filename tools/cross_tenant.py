@@ -20,6 +20,8 @@ class CrossTenantTool:
         Search for an error signature across ALL tenant projects.
         Returns match count, distinct tenant IDs, and earliest occurrence.
         """
+        LogfireTool._sanitize(error_signature)
+        LogfireTool._sanitize(service)
         sql = f"""
             SELECT
                 attributes->>'tenant_id' AS tenant_id,
@@ -50,6 +52,7 @@ class CrossTenantTool:
             "match_count": len(tenant_ids),
             "affected_tenant_ids": tenant_ids,
             "earliest_occurrence": earliest,
+            "pattern_confidence": "high" if len(tenant_ids) > 3 else "medium" if len(tenant_ids) > 1 else "low",
         })
 
     def as_tools(self) -> list:

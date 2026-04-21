@@ -1,7 +1,10 @@
 # tools/logfire_tool.py
 # mcp is imported inside _call_mcp() only to allow import of this module when mcp is not installed
 from __future__ import annotations
+import re
 from typing import Optional
+
+_ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z?$")
 
 
 class LogfireTool:
@@ -11,6 +14,20 @@ class LogfireTool:
 
     def __init__(self, token: str):
         self.token = token
+
+    @staticmethod
+    def _sanitize(value: str) -> str:
+        """Reject values containing SQL metacharacters to prevent injection."""
+        for c in ("'", '"', ";", "--", "/*", "*/"):
+            if c in value:
+                raise ValueError(f"Invalid characters in query parameter: {value!r}")
+        return value
+
+    @staticmethod
+    def _validate_timestamp(value: str) -> str:
+        if not _ISO_UTC_RE.match(value):
+            raise ValueError(f"Invalid timestamp format (expected ISO 8601 UTC): {value!r}")
+        return value
 
     async def _call_mcp(self, sql: str) -> str:
         """Open a fresh MCP connection, execute SQL, return result as string."""
@@ -40,6 +57,11 @@ class LogfireTool:
         error_only: bool = False,
     ) -> str:
         """Return spans for a tenant in a time window."""
+        self._sanitize(tenant_id)
+        self._validate_timestamp(start_utc)
+        self._validate_timestamp(end_utc)
+        if service:
+            self._sanitize(service)
         service_filter = f"AND service_name = '{service}'" if service else ""
         error_filter = "AND is_exception = true" if error_only else ""
         sql = f"""
@@ -59,6 +81,7 @@ class LogfireTool:
 
     async def get_trace_detail(self, trace_id: str) -> str:
         """Return the full span tree for a single trace."""
+        self._sanitize(trace_id)
         sql = f"""
             SELECT span_id, parent_span_id, service_name, span_name,
                    start_timestamp, end_timestamp, duration_ms,
@@ -72,6 +95,10 @@ class LogfireTool:
 
     async def query_logs(self, tenant_id: str, query: str, start_utc: str, end_utc: str) -> str:
         """Structured log search for a tenant."""
+        self._sanitize(tenant_id)
+        self._sanitize(query)
+        self._validate_timestamp(start_utc)
+        self._validate_timestamp(end_utc)
         sql = f"""
             SELECT trace_id, span_id, service_name, message,
                    start_timestamp, level
@@ -89,6 +116,10 @@ class LogfireTool:
         self, tenant_id: str, service: str, start_utc: str, end_utc: str
     ) -> str:
         """Error rate per minute for a service in a time window."""
+        self._sanitize(tenant_id)
+        self._sanitize(service)
+        self._validate_timestamp(start_utc)
+        self._validate_timestamp(end_utc)
         sql = f"""
             SELECT
                 date_trunc('minute', start_timestamp) AS minute,

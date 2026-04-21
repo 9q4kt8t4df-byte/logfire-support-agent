@@ -17,15 +17,20 @@ class WorkatoTool:
     async def read_salesforce_case(self, case_id: str) -> str:
         if not self.sf_read_url:
             return f"[Workato not configured — Salesforce read unavailable. Case ID: {case_id}]"
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.sf_read_url,
-                json={"case_id": case_id},
-                headers={"x-api-key": self.api_key},
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.text
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.sf_read_url,
+                    json={"case_id": case_id},
+                    headers={"x-api-key": self.api_key},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                return response.text
+        except httpx.HTTPStatusError as e:
+            return f"[Workato error — HTTP {e.response.status_code}: {e.response.text[:200]}]"
+        except httpx.RequestError as e:
+            return f"[Workato unreachable — {type(e).__name__}: {e}]"
 
     async def create_tfs_ticket(
         self,
@@ -38,25 +43,36 @@ class WorkatoTool:
     ) -> str:
         if not self.tfs_write_url:
             return (
-                f"[Workato not configured — TFS ticket NOT created. "
-                f"Title: {title} | Priority: {priority} | SF Case: {linked_sf_case_id}]"
+                "[Workato not configured — TFS ticket NOT created. "
+                "Please create manually with the following details:\n"
+                f"Title: {title}\n"
+                f"Priority: {priority}\n"
+                f"SF Case: {linked_sf_case_id}\n"
+                f"Root Cause: {root_cause}\n"
+                f"Affected Tenants: {', '.join(affected_tenants)}\n"
+                f"Evidence: {', '.join(evidence_links)}]"
             )
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.tfs_write_url,
-                json={
-                    "title": title,
-                    "root_cause": root_cause,
-                    "affected_tenants": affected_tenants,
-                    "evidence_links": evidence_links,
-                    "priority": priority,
-                    "linked_sf_case_id": linked_sf_case_id,
-                },
-                headers={"x-api-key": self.api_key},
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.text
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.tfs_write_url,
+                    json={
+                        "title": title,
+                        "root_cause": root_cause,
+                        "affected_tenants": affected_tenants,
+                        "evidence_links": evidence_links,
+                        "priority": priority,
+                        "linked_sf_case_id": linked_sf_case_id,
+                    },
+                    headers={"x-api-key": self.api_key},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                return response.text
+        except httpx.HTTPStatusError as e:
+            return f"[Workato error — HTTP {e.response.status_code}: {e.response.text[:200]}]"
+        except httpx.RequestError as e:
+            return f"[Workato unreachable — {type(e).__name__}: {e}]"
 
     def as_tools(self) -> list:
         return [
