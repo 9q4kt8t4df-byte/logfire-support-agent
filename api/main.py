@@ -1,0 +1,63 @@
+# api/main.py
+from __future__ import annotations
+from typing import Optional
+from fastapi import FastAPI, HTTPException
+from api.models import ChatRequest, ChatResponse, MessageRecord
+import config as cfg
+from orchestrator.orchestrator import AgentOrchestrator
+from agents.supervisor import SupervisorAgent
+from agents.investigator import InvestigatorAgent
+from agents.smoke_detector import SmokeDetectorAgent
+from tools.logfire_tool import LogfireTool
+from tools.knowledge_tool import KnowledgeTool
+from tools.workato_tool import WorkatoTool
+from tools.cross_tenant import CrossTenantTool
+
+
+def build_orchestrator() -> AgentOrchestrator:
+    logfire = LogfireTool(token=cfg.LOGFIRE_TOKEN)
+    knowledge = KnowledgeTool()
+    workato = WorkatoTool()
+    cross_tenant = CrossTenantTool(logfire_tool=logfire)
+
+    investigator = InvestigatorAgent(logfire_tool=logfire, knowledge_tool=knowledge)
+    smoke_det = SmokeDetectorAgent(logfire_tool=logfire, cross_tenant_tool=cross_tenant)
+    supervisor = SupervisorAgent(
+        logfire_tool=logfire,
+        knowledge_tool=knowledge,
+        workato_tool=workato,
+        sub_agents={
+            "logfire-investigator": investigator,
+            "smoke-detector": smoke_det,
+        },
+    )
+    return AgentOrchestrator(supervisor=supervisor)
+
+
+def create_app(orchestrator: Optional[AgentOrchestrator] = None) -> FastAPI:
+    app = FastAPI(title="LogFire Support Agent", version="1.0.0")
+    _orchestrator = orchestrator if orchestrator is not None else build_orchestrator()
+
+    @app.post("/api/chat", response_model=ChatResponse)
+    async def chat(request: ChatRequest):
+        try:
+            return await _orchestrator.chat(
+                message=request.message,
+                case_id=request.case_id,
+                conversation_id=request.conversation_id,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+    @app.get("/api/conversations/{conversation_id}/messages")
+    def get_messages(conversation_id: str):
+        return _orchestrator.get_messages(conversation_id)
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    return app
+
+
+app = create_app()
