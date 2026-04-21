@@ -14,6 +14,24 @@ class WorkatoTool:
         self.tfs_write_url = config.WORKATO_WEBHOOK_TFS_WRITE
         self.api_key = config.WORKATO_API_KEY
 
+    @staticmethod
+    def _build_ticket_body(
+        root_cause: str,
+        affected_tenants: list,
+        evidence_links: list,
+        priority: str,
+        linked_sf_case_id: str,
+    ) -> str:
+        tenants_md = "\n".join(f"- {t}" for t in affected_tenants) or "- (none)"
+        evidence_md = "\n".join(f"- {e}" for e in evidence_links) or "- (none)"
+        return (
+            f"## Root Cause\n{root_cause}\n\n"
+            f"## Affected Tenants\n{tenants_md}\n\n"
+            f"## Evidence\n{evidence_md}\n\n"
+            f"## Priority\n{priority}\n\n"
+            f"## Linked Salesforce Case\n{linked_sf_case_id}"
+        )
+
     async def read_salesforce_case(self, case_id: str) -> str:
         if not self.sf_read_url:
             return f"[Workato not configured — Salesforce read unavailable. Case ID: {case_id}]"
@@ -41,16 +59,21 @@ class WorkatoTool:
         priority: str,
         linked_sf_case_id: str,
     ) -> str:
+        body = self._build_ticket_body(
+            root_cause=root_cause,
+            affected_tenants=affected_tenants,
+            evidence_links=evidence_links,
+            priority=priority,
+            linked_sf_case_id=linked_sf_case_id,
+        )
         if not self.tfs_write_url:
             return (
                 "[Workato not configured — TFS ticket NOT created. "
                 "Please create manually with the following details:\n"
                 f"Title: {title}\n"
                 f"Priority: {priority}\n"
-                f"SF Case: {linked_sf_case_id}\n"
-                f"Root Cause: {root_cause}\n"
-                f"Affected Tenants: {', '.join(affected_tenants)}\n"
-                f"Evidence: {', '.join(evidence_links)}]"
+                f"SF Case: {linked_sf_case_id}\n\n"
+                f"{body}]"
             )
         try:
             async with httpx.AsyncClient() as client:
@@ -63,6 +86,7 @@ class WorkatoTool:
                         "evidence_links": evidence_links,
                         "priority": priority,
                         "linked_sf_case_id": linked_sf_case_id,
+                        "body": body,
                     },
                     headers={"x-api-key": self.api_key},
                     timeout=30,
