@@ -110,3 +110,61 @@ async def test_smoke_detector_has_correct_tools(smoke_detector):
     # Must NOT have Workato or delegation tools
     assert "create_tfs_ticket" not in tool_names
     assert "delegate_to_agent" not in tool_names
+
+from agents.supervisor import SupervisorAgent
+
+
+@pytest.fixture
+def supervisor():
+    from tools.logfire_tool import LogfireTool
+    from tools.knowledge_tool import KnowledgeTool
+    from tools.workato_tool import WorkatoTool
+    from agents.investigator import InvestigatorAgent
+    from agents.smoke_detector import SmokeDetectorAgent
+    from tools.cross_tenant import CrossTenantTool
+
+    logfire = LogfireTool(token="test-token")
+    knowledge = KnowledgeTool(knowledge_dir="knowledge")
+    workato = WorkatoTool()
+    cross_tenant = CrossTenantTool(logfire_tool=logfire)
+    investigator = InvestigatorAgent(logfire_tool=logfire, knowledge_tool=knowledge)
+    smoke_det = SmokeDetectorAgent(logfire_tool=logfire, cross_tenant_tool=cross_tenant)
+
+    return SupervisorAgent(
+        logfire_tool=logfire,
+        knowledge_tool=knowledge,
+        workato_tool=workato,
+        sub_agents={"logfire-investigator": investigator, "smoke-detector": smoke_det},
+    )
+
+
+@pytest.mark.asyncio
+async def test_supervisor_has_delegate_tool(supervisor):
+    tool_names = [t["name"] for t in supervisor.tool_definitions]
+    assert "delegate_to_agent" in tool_names
+
+
+@pytest.mark.asyncio
+async def test_supervisor_has_workato_tools(supervisor):
+    tool_names = [t["name"] for t in supervisor.tool_definitions]
+    assert "read_salesforce_case" in tool_names
+    assert "create_tfs_ticket" in tool_names
+
+
+@pytest.mark.asyncio
+async def test_supervisor_delegation_calls_sub_agent(supervisor):
+    mock_investigator = AsyncMock()
+    mock_investigator.run = AsyncMock(return_value='{"root_cause": "MS throttling"}')
+    mock_investigator.tools_used = ["query_traces"]
+    supervisor.sub_agents["logfire-investigator"] = mock_investigator
+
+    result = await supervisor._delegate("logfire-investigator", "investigate tenant-acme errors")
+
+    mock_investigator.run.assert_called_once()
+    assert "throttling" in result
+
+
+@pytest.mark.asyncio
+async def test_supervisor_delegation_rejects_unknown_agent(supervisor):
+    result = await supervisor._delegate("unknown-agent", "some task")
+    assert "not found" in result.lower() or "unknown" in result.lower()
