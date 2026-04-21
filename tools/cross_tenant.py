@@ -22,6 +22,8 @@ class CrossTenantTool:
         """
         LogfireTool._sanitize(error_signature)
         LogfireTool._sanitize(service)
+        LogfireTool._validate_timestamp(start_utc)
+        LogfireTool._validate_timestamp(end_utc)
         sql = f"""
             SELECT
                 attributes->>'tenant_id' AS tenant_id,
