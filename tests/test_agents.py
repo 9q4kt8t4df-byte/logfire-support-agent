@@ -1,5 +1,4 @@
 # tests/test_agents.py
-import os
 from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -184,23 +183,6 @@ def test_smoke_threshold_appears_in_supervisor_prompt():
 
 
 def test_smoke_threshold_invalid_env_raises_clear_error():
-    import importlib
-    import sys
-    import config as cfg_module
-    original = os.environ.get("SMOKE_THRESHOLD")
-    os.environ["SMOKE_THRESHOLD"] = "not-a-number"
-    try:
-        # Force config module to re-evaluate SMOKE_THRESHOLD
-        if "config" in sys.modules:
-            del sys.modules["config"]
-        with pytest.raises(ValueError, match="SMOKE_THRESHOLD must be an integer"):
-            importlib.import_module("config")
-    finally:
-        if original is None:
-            os.environ.pop("SMOKE_THRESHOLD", None)
-        else:
-            os.environ["SMOKE_THRESHOLD"] = original
-        # Restore real config module
-        if "config" in sys.modules:
-            del sys.modules["config"]
-        importlib.import_module("config")
+    import config
+    with pytest.raises(ValueError, match="SMOKE_THRESHOLD must be an integer"):
+        config._parse_smoke_threshold("not-a-number")
