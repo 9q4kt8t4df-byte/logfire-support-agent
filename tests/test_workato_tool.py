@@ -162,3 +162,35 @@ def test_as_tools_create_tfs_has_required_fields():
     required = tfs_def["input_schema"]["required"]
     for field in ("title", "root_cause", "affected_tenants", "priority", "linked_sf_case_id"):
         assert field in required
+
+
+def test_build_ticket_body_contains_all_sections():
+    body = WorkatoTool._build_ticket_body(
+        root_cause="MS throttling on sync-worker",
+        affected_tenants=["tenant-A", "tenant-B"],
+        evidence_links=["https://logfire.example.com/trace/abc"],
+        priority="P1",
+        linked_sf_case_id="SF-555",
+    )
+    assert "## Root Cause" in body
+    assert "MS throttling on sync-worker" in body
+    assert "## Affected Tenants" in body
+    assert "- tenant-A" in body
+    assert "- tenant-B" in body
+    assert "## Evidence" in body
+    assert "- https://logfire.example.com/trace/abc" in body
+    assert "## Priority" in body
+    assert "P1" in body
+    assert "## Linked Salesforce Case" in body
+    assert "SF-555" in body
+
+
+def test_build_ticket_body_empty_lists_show_none():
+    body = WorkatoTool._build_ticket_body(
+        root_cause="Unknown",
+        affected_tenants=[],
+        evidence_links=[],
+        priority="P3",
+        linked_sf_case_id="SF-0",
+    )
+    assert "- (none)" in body
