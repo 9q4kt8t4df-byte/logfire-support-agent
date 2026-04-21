@@ -3,6 +3,9 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import anthropic
 from agents.base import BaseAgent
+from agents.investigator import InvestigatorAgent
+from agents.smoke_detector import SmokeDetectorAgent
+from agents.supervisor import SupervisorAgent
 
 
 class ConcreteAgent(BaseAgent):
@@ -69,9 +72,6 @@ async def test_run_calls_tool_and_continues(agent):
     assert result == "Done after tool call."
     mock_tool.call.assert_called_once_with("fake_tool", {"param": "value"})
 
-from agents.investigator import InvestigatorAgent
-from agents.smoke_detector import SmokeDetectorAgent
-
 
 @pytest.fixture
 def investigator():
@@ -110,8 +110,6 @@ async def test_smoke_detector_has_correct_tools(smoke_detector):
     # Must NOT have Workato or delegation tools
     assert "create_tfs_ticket" not in tool_names
     assert "delegate_to_agent" not in tool_names
-
-from agents.supervisor import SupervisorAgent
 
 
 @pytest.fixture

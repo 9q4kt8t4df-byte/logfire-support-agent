@@ -32,14 +32,16 @@ class BaseAgent:
         current_messages = list(messages)
 
         while True:
-            response = await self.client.messages.create(
+            kwargs = dict(
                 model=self.config["model"],
                 max_tokens=self.config["max_tokens"],
                 system=self.config["system_prompt"],
-                tools=self.tool_definitions,
                 messages=current_messages,
                 temperature=self.config.get("temperature", 0.3),
             )
+            if self.tool_definitions:
+                kwargs["tools"] = self.tool_definitions
+            response = await self.client.messages.create(**kwargs)
 
             if response.stop_reason == "end_turn":
                 for block in response.content:
@@ -47,7 +49,7 @@ class BaseAgent:
                         return block.text
                 return ""
 
-            if response.stop_reason == "tool_use":
+            elif response.stop_reason == "tool_use":
                 tool_results = []
                 for block in response.content:
                     if block.type == "tool_use":
@@ -64,7 +66,16 @@ class BaseAgent:
                             "content": str(result),
                         })
 
-                current_messages = current_messages + [
-                    {"role": "assistant", "content": response.content},
-                    {"role": "user", "content": tool_results},
-                ]
+                if tool_results:
+                    current_messages = current_messages + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": tool_results},
+                    ]
+                else:
+                    return ""
+            else:
+                # Unexpected stop reason — treat as terminal to prevent infinite loop
+                for block in response.content:
+                    if hasattr(block, "text"):
+                        return block.text
+                return f"[Agent stopped: {response.stop_reason}]"
