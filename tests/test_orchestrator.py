@@ -52,3 +52,24 @@ async def test_get_messages_returns_history(orchestrator):
 async def test_tools_used_included_in_response(orchestrator):
     response = await orchestrator.chat(message="Investigate")
     assert "query_traces" in response.tools_used
+
+
+@pytest.mark.asyncio
+async def test_chat_prepends_case_id_to_stored_message(orchestrator):
+    response = await orchestrator.chat(
+        message="Customer cannot log in",
+        case_id="SF-99999",
+    )
+    messages = orchestrator.get_messages(response.conversation_id)
+    user_message = next(m for m in messages if m.role == "user")
+    assert "SF-99999" in user_message.content
+    assert "[Salesforce case_id: SF-99999]" in user_message.content
+
+
+@pytest.mark.asyncio
+async def test_chat_without_case_id_no_prefix(orchestrator):
+    response = await orchestrator.chat(message="Check tenant Acme")
+    messages = orchestrator.get_messages(response.conversation_id)
+    user_message = next(m for m in messages if m.role == "user")
+    assert "[Salesforce case_id:" not in user_message.content
+    assert user_message.content == "Check tenant Acme"
