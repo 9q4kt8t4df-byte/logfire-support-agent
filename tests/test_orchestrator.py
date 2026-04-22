@@ -10,7 +10,13 @@ def orchestrator(tmp_path):
     mock_supervisor = AsyncMock()
     mock_supervisor.run = AsyncMock(return_value="Root cause: MS throttling on sync-worker.")
     mock_supervisor.tools_used = ["query_traces", "delegate_to_agent"]
-    return AgentOrchestrator(supervisor=mock_supervisor, db_url=db_path)
+    mock_workato = AsyncMock()
+    mock_workato.send_teams_alert = AsyncMock(return_value="[Teams alert sent]")
+    return AgentOrchestrator(
+        supervisor=mock_supervisor,
+        workato_tool=mock_workato,
+        db_url=db_path,
+    )
 
 
 @pytest.mark.asyncio
@@ -73,3 +79,74 @@ async def test_chat_without_case_id_no_prefix(orchestrator):
     user_message = next(m for m in messages if m.role == "user")
     assert "[Salesforce case_id:" not in user_message.content
     assert user_message.content == "Check tenant Acme"
+
+
+@pytest.mark.asyncio
+async def test_chat_sends_teams_alert_on_platform_wide_incident(tmp_path):
+    smoke_json = (
+        '{"alert_type": "platform_wide_incident", '
+        '"pattern": "MS throttling — sync-worker", '
+        '"affected_tenant_count": 14, '
+        '"affected_tenant_ids": ["tenant-a", "tenant-b"], '
+        '"earliest_occurrence_utc": "2026-04-22T09:14:00Z", '
+        '"pattern_confidence": "high", '
+        '"recommended_priority": "P1"}'
+    )
+    mock_supervisor = AsyncMock()
+    mock_supervisor.run = AsyncMock(return_value=f"Platform incident confirmed. {smoke_json}")
+    mock_supervisor.tools_used = []
+    mock_workato = AsyncMock()
+    mock_workato.send_teams_alert = AsyncMock(return_value="[Teams alert sent]")
+    orch = AgentOrchestrator(
+        supervisor=mock_supervisor,
+        workato_tool=mock_workato,
+        db_url=f"sqlite:///{tmp_path}/test.db",
+    )
+    await orch.chat(message="Check tenant X", case_id="SF-99")
+    mock_workato.send_teams_alert.assert_called_once()
+    call_kwargs = mock_workato.send_teams_alert.call_args.kwargs
+    assert call_kwargs["case_id"] == "SF-99"
+    assert call_kwargs["affected_tenant_count"] == 14
+    assert call_kwargs["pattern_confidence"] == "high"
+    assert "/api/conversations/" in call_kwargs["conversation_url"]
+
+
+@pytest.mark.asyncio
+async def test_chat_does_not_send_teams_alert_for_isolated_incident(tmp_path):
+    smoke_json = (
+        '{"alert_type": "isolated", '
+        '"pattern": "auth failure", '
+        '"affected_tenant_count": 1, '
+        '"affected_tenant_ids": ["tenant-a"], '
+        '"earliest_occurrence_utc": "2026-04-22T09:14:00Z", '
+        '"pattern_confidence": "low", '
+        '"recommended_priority": "P3"}'
+    )
+    mock_supervisor = AsyncMock()
+    mock_supervisor.run = AsyncMock(return_value=f"Isolated issue found. {smoke_json}")
+    mock_supervisor.tools_used = []
+    mock_workato = AsyncMock()
+    mock_workato.send_teams_alert = AsyncMock(return_value="ok")
+    orch = AgentOrchestrator(
+        supervisor=mock_supervisor,
+        workato_tool=mock_workato,
+        db_url=f"sqlite:///{tmp_path}/test.db",
+    )
+    await orch.chat(message="Check tenant X")
+    mock_workato.send_teams_alert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_chat_does_not_send_teams_alert_when_no_smoke_alert(tmp_path):
+    mock_supervisor = AsyncMock()
+    mock_supervisor.run = AsyncMock(return_value="Root cause: config error in tenant Y.")
+    mock_supervisor.tools_used = []
+    mock_workato = AsyncMock()
+    mock_workato.send_teams_alert = AsyncMock(return_value="ok")
+    orch = AgentOrchestrator(
+        supervisor=mock_supervisor,
+        workato_tool=mock_workato,
+        db_url=f"sqlite:///{tmp_path}/test.db",
+    )
+    await orch.chat(message="Investigate tenant Y")
+    mock_workato.send_teams_alert.assert_not_called()

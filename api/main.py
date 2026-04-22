@@ -31,7 +31,7 @@ def build_orchestrator() -> AgentOrchestrator:
             "smoke-detector": smoke_det,
         },
     )
-    return AgentOrchestrator(supervisor=supervisor)
+    return AgentOrchestrator(supervisor=supervisor, workato_tool=workato)
 
 
 def create_app(orchestrator: Optional[AgentOrchestrator] = None) -> FastAPI:
