@@ -28,6 +28,8 @@ Phase 3 does **not** introduce a background polling process. The trigger is alwa
 | `WORKATO_WEBHOOK_SF_UPDATE` | Webhook URL — Workato updates SF case priority | Yes — stub message returned |
 | `CHAT_BASE_URL` | Base URL of this service, e.g. `http://your-agent:8000` | Default: `http://localhost:8000` |
 
+> **Note on `conversation_url`:** Phase 3 has no web frontend — the agent is a REST API. The Teams notification includes `conversation_url` formatted as `CHAT_BASE_URL + "/api/conversations/" + conversation_id`. This is not a clickable chat UI; it is a reference link. Engineers use it to retrieve the conversation ID and continue the investigation via their normal API client (Postman, curl, or the CLI). A web chat UI is Phase 4 scope.
+
 ---
 
 ## Changes by File
@@ -147,7 +149,7 @@ def __init__(
 smoke_alert = self._extract_smoke_alert(response_text)
 
 if smoke_alert and smoke_alert.alert_type == "platform_wide_incident":
-    conversation_url = f"{cfg.CHAT_BASE_URL}/chat?conv={conv.id}"
+    conversation_url = f"{cfg.CHAT_BASE_URL}/api/conversations/{conv.id}/messages"
     await self.workato.send_teams_alert(
         case_id=case_id or "",
         root_cause=smoke_alert.pattern,
@@ -228,7 +230,7 @@ The orchestrator sends this JSON to Workato. Workato owns the Teams card formatt
 | `affected_tenant_ids` | `SmokeAlert.affected_tenant_ids` |
 | `earliest_occurrence_utc` | `SmokeAlert.earliest_occurrence_utc` |
 | `pattern_confidence` | `SmokeAlert.pattern_confidence` |
-| `conversation_url` | `CHAT_BASE_URL + "/chat?conv=" + conversation_id` |
+| `conversation_url` | `CHAT_BASE_URL + "/api/conversations/" + conversation_id + "/messages"` |
 
 ---
 
