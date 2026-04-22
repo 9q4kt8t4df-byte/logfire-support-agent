@@ -94,6 +94,31 @@ WORKATO_API_KEY=your-workato-api-key
 
 The agent works without these — it degrades gracefully and produces ticket text for manual creation.
 
+## Teams Alerting + SF Escalation (Phase 3)
+
+Add these to `.env` to enable automatic Teams notifications and Salesforce case escalation:
+
+```
+WORKATO_WEBHOOK_TEAMS_NOTIFY=https://apim.workato.com/...
+WORKATO_WEBHOOK_SF_UPDATE=https://apim.workato.com/...
+CHAT_BASE_URL=http://your-agent-host:8000
+```
+
+All three degrade gracefully if absent — Phase 1/2 functionality is unaffected.
+
+## Architecture Documentation (Phase 4)
+
+Open `docs/architecture/index.html` in any browser (double-click, no server needed) for a full visual overview of the system: request flow, agent roles, tool matrix, integrations, data models, and escalation flow — all with Mermaid diagrams.
+
+## Logfire Reference
+
+The agent queries traces produced by the **Logfire Python SDK**. Key references:
+
+- **Logfire API docs:** https://pydantic.dev/docs/logfire/api/logfire/
+- **Trace & span model:** `knowledge/logfire-sdk-reference.md` — explains span attributes, error patterns, and how instrumentation libraries (FastAPI, Anthropic, httpx) structure their spans. The investigator agent uses this via the KnowledgeTool during investigations.
+
+The `LOGFIRE_TOKEN` must have **organisation-level read scope** (not project-scoped) for cross-tenant smoke detection to work.
+
 ## Running Tests
 
 ```bash

@@ -331,10 +331,12 @@ graph TB
           </pre>
         </div>
         <div class="note">All Workato env vars degrade gracefully if unset: <code>WORKATO_WEBHOOK_SF_READ</code>, <code>WORKATO_WEBHOOK_TFS_WRITE</code>, <code>WORKATO_WEBHOOK_TEAMS_NOTIFY</code>, <code>WORKATO_WEBHOOK_SF_UPDATE</code>, <code>WORKATO_API_KEY</code>.</div>
+        <div class="note">Logfire traces are produced by the <strong>Logfire Python SDK</strong> (<a href="https://pydantic.dev/docs/logfire/api/logfire/" style="color:#4af">API docs</a>). The agent reads spans created by <code>logfire.instrument_fastapi()</code>, <code>logfire.instrument_anthropic()</code>, <code>logfire.span()</code>, and other instrumentation calls. Span attribute patterns are documented in <code>knowledge/logfire-sdk-reference.md</code>.</div>
         <div class="file-refs-label">Key files</div>
         <div class="file-list">
           <div class="file-tag"><span>tools/</span>workato_tool.py</div>
           <div class="file-tag"><span>tools/</span>logfire_tool.py</div>
+          <div class="file-tag"><span>knowledge/</span>logfire-sdk-reference.md</div>
           <div class="file-tag">config.py</div>
         </div>
       </div>
