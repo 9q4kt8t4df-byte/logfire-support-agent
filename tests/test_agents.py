@@ -186,3 +186,9 @@ def test_smoke_threshold_invalid_env_raises_clear_error():
     import config
     with pytest.raises(ValueError, match="SMOKE_THRESHOLD must be an integer"):
         config._parse_smoke_threshold("not-a-number")
+
+
+def test_supervisor_prompt_includes_update_sf_priority_instruction():
+    import config
+    prompt = config.AGENTS["support-supervisor"]["system_prompt"]
+    assert "update_salesforce_case_priority" in prompt
