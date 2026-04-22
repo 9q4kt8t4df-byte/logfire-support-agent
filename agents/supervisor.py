@@ -69,6 +69,5 @@ class SupervisorAgent(BaseAgent):
         if agent_id not in self.sub_agents:
             return f"Delegation failed: agent '{agent_id}' not found. Available: {list(self.sub_agents.keys())}"
         sub_agent = self.sub_agents[agent_id]
-        result = await sub_agent.run([{"role": "user", "content": task}])
-        self.tools_used.extend(sub_agent.tools_used)
+        result, _ = await sub_agent.run([{"role": "user", "content": task}])
         return result

@@ -15,7 +15,6 @@ class BaseAgent:
         self.config = config
         self.client = anthropic.AsyncAnthropic(api_key=cfg.ANTHROPIC_API_KEY)
         self.tool_map: dict = {}
-        self.tools_used: list = []
 
         all_tool_defs = []
         for tool in tools:
@@ -25,9 +24,9 @@ class BaseAgent:
 
         self.tool_definitions = all_tool_defs
 
-    async def run(self, messages: list) -> str:
-        """Run the tool-use loop. Returns the final text response."""
-        self.tools_used = []
+    async def run(self, messages: list) -> tuple[str, list[str]]:
+        """Run the tool-use loop. Returns (response_text, tools_used)."""
+        tools_used: list[str] = []
         current_messages = list(messages)
 
         while True:
@@ -45,14 +44,14 @@ class BaseAgent:
             if response.stop_reason == "end_turn":
                 for block in response.content:
                     if hasattr(block, "text"):
-                        return block.text
-                return ""
+                        return block.text, tools_used
+                return "", tools_used
 
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 for block in response.content:
                     if block.type == "tool_use":
-                        self.tools_used.append(block.name)
+                        tools_used.append(block.name)
                         if block.name in self.tool_map:
                             result = await self.tool_map[block.name].call(
                                 block.name, block.input
@@ -71,10 +70,10 @@ class BaseAgent:
                         {"role": "user", "content": tool_results},
                     ]
                 else:
-                    return ""
+                    return "", tools_used
             else:
                 # Unexpected stop reason — treat as terminal to prevent infinite loop
                 for block in response.content:
                     if hasattr(block, "text"):
-                        return block.text
-                return f"[Agent stopped: {response.stop_reason}]"
+                        return block.text, tools_used
+                return f"[Agent stopped: {response.stop_reason}]", tools_used

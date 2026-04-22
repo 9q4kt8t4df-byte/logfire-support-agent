@@ -1,4 +1,5 @@
 # tools/cross_tenant.py
+from __future__ import annotations
 import json
 from tools.logfire_tool import LogfireTool
 
@@ -51,9 +52,9 @@ class CrossTenantTool:
         tenant_ids = [r["tenant_id"] for r in rows if r.get("tenant_id")]
         earliest = min((r["earliest_occurrence"] for r in rows if r.get("earliest_occurrence")), default="unknown")
         return json.dumps({
-            "match_count": len(tenant_ids),
+            "affected_tenant_count": len(tenant_ids),
             "affected_tenant_ids": tenant_ids,
-            "earliest_occurrence": earliest,
+            "earliest_occurrence_utc": earliest,
             "pattern_confidence": "high" if len(tenant_ids) > 3 else "medium" if len(tenant_ids) > 1 else "low",
         })
 

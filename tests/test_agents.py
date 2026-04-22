@@ -40,9 +40,10 @@ async def test_run_returns_text_on_end_turn(agent):
         mock_client.messages.create = AsyncMock(return_value=mock_response)
 
         agent.client = mock_client
-        result = await agent.run([{"role": "user", "content": "Investigate this"}])
+        text, tools = await agent.run([{"role": "user", "content": "Investigate this"}])
 
-    assert result == "Investigation complete."
+    assert text == "Investigation complete."
+    assert tools == []
 
 
 @pytest.mark.asyncio
@@ -70,9 +71,10 @@ async def test_run_calls_tool_and_continues(agent):
         agent.client.messages.create = AsyncMock(
             side_effect=[tool_use_response, end_turn_response]
         )
-        result = await agent.run([{"role": "user", "content": "Use the tool"}])
+        text, tools = await agent.run([{"role": "user", "content": "Use the tool"}])
 
-    assert result == "Done after tool call."
+    assert text == "Done after tool call."
+    assert "fake_tool" in tools
     mock_tool.call.assert_called_once_with("fake_tool", {"param": "value"})
 
 
@@ -155,8 +157,7 @@ async def test_supervisor_has_workato_tools(supervisor):
 @pytest.mark.asyncio
 async def test_supervisor_delegation_calls_sub_agent(supervisor):
     mock_investigator = AsyncMock()
-    mock_investigator.run = AsyncMock(return_value='{"root_cause": "MS throttling"}')
-    mock_investigator.tools_used = ["query_traces"]
+    mock_investigator.run = AsyncMock(return_value=('{"root_cause": "MS throttling"}', ["query_traces"]))
     supervisor.sub_agents["logfire-investigator"] = mock_investigator
 
     result = await supervisor._delegate("logfire-investigator", "investigate tenant-acme errors")
@@ -169,3 +170,26 @@ async def test_supervisor_delegation_calls_sub_agent(supervisor):
 async def test_supervisor_delegation_rejects_unknown_agent(supervisor):
     result = await supervisor._delegate("unknown-agent", "some task")
     assert "not found" in result.lower() or "unknown" in result.lower()
+
+
+def test_smoke_threshold_appears_in_supervisor_prompt():
+    """SMOKE_THRESHOLD from config is injected into the supervisor system prompt."""
+    import config
+    threshold_str = str(config.SMOKE_THRESHOLD)
+    prompt = config.AGENTS["support-supervisor"]["system_prompt"]
+    assert threshold_str in prompt, (
+        f"SMOKE_THRESHOLD ({threshold_str}) not found in supervisor system_prompt. "
+        "Did you forget to inject it with an f-string?"
+    )
+
+
+def test_smoke_threshold_invalid_env_raises_clear_error():
+    import config
+    with pytest.raises(ValueError, match="SMOKE_THRESHOLD must be an integer"):
+        config._parse_smoke_threshold("not-a-number")
+
+
+def test_supervisor_prompt_includes_update_sf_priority_instruction():
+    import config
+    prompt = config.AGENTS["support-supervisor"]["system_prompt"]
+    assert "update_salesforce_case_priority" in prompt

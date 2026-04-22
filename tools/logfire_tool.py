@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-_ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+_ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 
 
 class LogfireTool:
@@ -18,7 +18,7 @@ class LogfireTool:
     @staticmethod
     def _sanitize(value: str) -> str:
         """Reject values containing SQL metacharacters to prevent injection."""
-        for c in ("'", '"', ";", "--", "/*", "*/", "%", "_", "\\", "\n", "\r"):
+        for c in ("'", '"', ";", "--", "/*", "*/", "\\", "\n", "\r"):
             if c in value:
                 raise ValueError(f"Invalid characters in query parameter: {value!r}")
         return value
@@ -38,16 +38,19 @@ class LogfireTool:
             command="logfire-mcp",
             env={**os.environ, "LOGFIRE_TOKEN": self.token},
         )
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    self.MCP_TOOL_NAME,
-                    {"sql": sql},
-                )
-                if result.content:
-                    return result.content[0].text
-                return "[]"
+        try:
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await session.call_tool(
+                        self.MCP_TOOL_NAME,
+                        {"sql": sql},
+                    )
+                    if result.content:
+                        return result.content[0].text
+                    return "[]"
+        except FileNotFoundError:
+            return "[Error: logfire-mcp binary not found on PATH. Run: pip install logfire-mcp]"
 
     async def query_traces(
         self,

@@ -1,6 +1,5 @@
 # api/main.py
 from __future__ import annotations
-from typing import Optional
 from fastapi import FastAPI, HTTPException
 from api.models import ChatRequest, ChatResponse, MessageRecord
 import config as cfg
@@ -31,10 +30,10 @@ def build_orchestrator() -> AgentOrchestrator:
             "smoke-detector": smoke_det,
         },
     )
-    return AgentOrchestrator(supervisor=supervisor)
+    return AgentOrchestrator(supervisor=supervisor, workato_tool=workato)
 
 
-def create_app(orchestrator: Optional[AgentOrchestrator] = None) -> FastAPI:
+def create_app(orchestrator: AgentOrchestrator | None = None) -> FastAPI:
     app = FastAPI(title="LogFire Support Agent", version="1.0.0")
     _orchestrator = orchestrator if orchestrator is not None else build_orchestrator()
 
@@ -47,7 +46,9 @@ def create_app(orchestrator: Optional[AgentOrchestrator] = None) -> FastAPI:
                 conversation_id=request.conversation_id,
             )
         except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            msg = str(e)
+            status = 404 if "not found" in msg.lower() else 422
+            raise HTTPException(status_code=status, detail=msg)
 
     @app.get("/api/conversations/{conversation_id}/messages", response_model=list[MessageRecord])
     def get_messages(conversation_id: str):
