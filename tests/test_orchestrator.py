@@ -8,8 +8,7 @@ from orchestrator.orchestrator import AgentOrchestrator
 def orchestrator(tmp_path):
     db_path = f"sqlite:///{tmp_path}/test.db"
     mock_supervisor = AsyncMock()
-    mock_supervisor.run = AsyncMock(return_value="Root cause: MS throttling on sync-worker.")
-    mock_supervisor.tools_used = ["query_traces", "delegate_to_agent"]
+    mock_supervisor.run = AsyncMock(return_value=("Root cause: MS throttling on sync-worker.", ["query_traces", "delegate_to_agent"]))
     mock_workato = AsyncMock()
     mock_workato.send_teams_alert = AsyncMock(return_value="[Teams alert sent]")
     return AgentOrchestrator(
@@ -93,8 +92,7 @@ async def test_chat_sends_teams_alert_on_platform_wide_incident(tmp_path):
         '"recommended_priority": "P1"}'
     )
     mock_supervisor = AsyncMock()
-    mock_supervisor.run = AsyncMock(return_value=f"Platform incident confirmed. {smoke_json}")
-    mock_supervisor.tools_used = []
+    mock_supervisor.run = AsyncMock(return_value=(f"Platform incident confirmed. <smoke_alert>{smoke_json}</smoke_alert>", []))
     mock_workato = AsyncMock()
     mock_workato.send_teams_alert = AsyncMock(return_value="[Teams alert sent]")
     orch = AgentOrchestrator(
@@ -113,18 +111,8 @@ async def test_chat_sends_teams_alert_on_platform_wide_incident(tmp_path):
 
 @pytest.mark.asyncio
 async def test_chat_does_not_send_teams_alert_for_isolated_incident(tmp_path):
-    smoke_json = (
-        '{"alert_type": "isolated", '
-        '"pattern": "auth failure", '
-        '"affected_tenant_count": 1, '
-        '"affected_tenant_ids": ["tenant-a"], '
-        '"earliest_occurrence_utc": "2026-04-22T09:14:00Z", '
-        '"pattern_confidence": "low", '
-        '"recommended_priority": "P3"}'
-    )
     mock_supervisor = AsyncMock()
-    mock_supervisor.run = AsyncMock(return_value=f"Isolated issue found. {smoke_json}")
-    mock_supervisor.tools_used = []
+    mock_supervisor.run = AsyncMock(return_value=("Isolated issue found. No platform-wide incident.", []))
     mock_workato = AsyncMock()
     mock_workato.send_teams_alert = AsyncMock(return_value="ok")
     orch = AgentOrchestrator(
@@ -139,8 +127,7 @@ async def test_chat_does_not_send_teams_alert_for_isolated_incident(tmp_path):
 @pytest.mark.asyncio
 async def test_chat_does_not_send_teams_alert_when_no_smoke_alert(tmp_path):
     mock_supervisor = AsyncMock()
-    mock_supervisor.run = AsyncMock(return_value="Root cause: config error in tenant Y.")
-    mock_supervisor.tools_used = []
+    mock_supervisor.run = AsyncMock(return_value=("Root cause: config error in tenant Y.", []))
     mock_workato = AsyncMock()
     mock_workato.send_teams_alert = AsyncMock(return_value="ok")
     orch = AgentOrchestrator(

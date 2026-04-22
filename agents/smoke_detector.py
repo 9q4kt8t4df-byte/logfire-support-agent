@@ -1,4 +1,5 @@
 # agents/smoke_detector.py
+from __future__ import annotations
 import config as cfg
 from agents.base import BaseAgent
 from tools.logfire_tool import LogfireTool

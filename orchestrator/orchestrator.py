@@ -1,6 +1,7 @@
 # orchestrator/orchestrator.py
 from __future__ import annotations
 import json
+import re
 from typing import Optional
 from pydantic import ValidationError
 from api.models import ChatResponse, MessageRecord, SmokeAlert
@@ -38,8 +39,7 @@ class AgentOrchestrator:
         self.store.add_message(conv.id, role="user", content=full_message)
 
         history = self._build_history(conv.id)
-        response_text = await self.supervisor.run(history)
-        tools_used = list(self.supervisor.tools_used)
+        response_text, tools_used = await self.supervisor.run(history)
 
         self.store.add_message(conv.id, role="assistant", content=response_text)
 
@@ -82,15 +82,12 @@ class AgentOrchestrator:
         return [{"role": m.role, "content": m.content} for m in messages]
 
     def _extract_smoke_alert(self, response_text: str) -> Optional[SmokeAlert]:
-        """
-        Parse smoke alert JSON from response text if the smoke-detector reported a platform-wide incident.
-        Uses raw_decode to correctly handle nested JSON objects.
-        """
+        """Parse smoke alert from <smoke_alert>...</smoke_alert> XML tags in response text."""
+        m = re.search(r"<smoke_alert>(.*?)</smoke_alert>", response_text, re.DOTALL)
+        if not m:
+            return None
         try:
-            start = response_text.find('{"alert_type"')
-            if start == -1:
-                return None
-            data, _ = json.JSONDecoder().raw_decode(response_text, start)
+            data = json.loads(m.group(1).strip())
             if data.get("alert_type") == "platform_wide_incident":
                 return SmokeAlert(**data)
         except (json.JSONDecodeError, KeyError, TypeError, ValidationError):

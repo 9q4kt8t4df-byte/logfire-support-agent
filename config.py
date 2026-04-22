@@ -76,9 +76,15 @@ AGENTS = {
             "Query Logfire across all tenant projects. "
             "Normalise error signatures before comparing — strip tenant-specific IDs, timestamps, "
             "and request IDs from error messages before matching.\n\n"
-            "Return these exact fields: "
-            "match_count (int), affected_tenant_ids (list), earliest_occurrence (ISO UTC string), "
-            "pattern_confidence (high/medium/low), alert_type ('platform_wide_incident' if match_count > 3 else 'isolated')."
+            "When you have results, wrap your JSON output in XML tags like this:\n"
+            "<smoke_alert>\n"
+            '{"alert_type": "platform_wide_incident", "pattern": "...", '
+            '"affected_tenant_count": N, "affected_tenant_ids": [...], '
+            '"earliest_occurrence_utc": "...", "pattern_confidence": "high|medium|low", '
+            '"recommended_priority": "P1|P2|P3"}\n'
+            "</smoke_alert>\n\n"
+            "Use alert_type 'platform_wide_incident' if affected_tenant_count > 3, otherwise 'isolated'. "
+            "Only emit the <smoke_alert> block if alert_type is 'platform_wide_incident'."
         ),
         "tools": ["logfire", "cross_tenant"],
         "model": "claude-sonnet-4-6",

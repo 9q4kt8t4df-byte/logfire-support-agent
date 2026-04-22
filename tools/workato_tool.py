@@ -1,4 +1,5 @@
 # tools/workato_tool.py
+from __future__ import annotations
 import httpx
 import config
 
@@ -200,31 +201,6 @@ class WorkatoTool:
                 },
             },
             {
-                "name": "send_teams_alert",
-                "description": (
-                    "Send a platform-wide incident alert to Microsoft Teams via Workato. "
-                    "Call this when smoke-detector confirms a platform_wide_incident. "
-                    "The alert notifies the on-call engineer with a link to this conversation."
-                ),
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "case_id": {"type": "string"},
-                        "root_cause": {"type": "string"},
-                        "affected_tenant_count": {"type": "integer"},
-                        "affected_tenant_ids": {"type": "array", "items": {"type": "string"}},
-                        "earliest_occurrence_utc": {"type": "string"},
-                        "pattern_confidence": {"type": "string", "enum": ["high", "medium", "low"]},
-                        "conversation_url": {"type": "string"},
-                    },
-                    "required": [
-                        "case_id", "root_cause", "affected_tenant_count",
-                        "affected_tenant_ids", "earliest_occurrence_utc",
-                        "pattern_confidence", "conversation_url",
-                    ],
-                },
-            },
-            {
                 "name": "update_salesforce_case_priority",
                 "description": (
                     "Update the priority of a Salesforce support case via Workato. "
@@ -248,8 +224,6 @@ class WorkatoTool:
             return await self.read_salesforce_case(**tool_input)
         if tool_name == "create_tfs_ticket":
             return await self.create_tfs_ticket(**tool_input)
-        if tool_name == "send_teams_alert":
-            return await self.send_teams_alert(**tool_input)
         if tool_name == "update_salesforce_case_priority":
             return await self.update_salesforce_case_priority(**tool_input)
         return f"Unknown tool: {tool_name}"
