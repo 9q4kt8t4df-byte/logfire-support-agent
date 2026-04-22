@@ -7,12 +7,20 @@ from unittest.mock import patch
 from tools.workato_tool import WorkatoTool
 
 
-def make_tool(sf_url: str = "", tfs_url: str = "", api_key: str = "") -> WorkatoTool:
+def make_tool(
+    sf_url: str = "",
+    tfs_url: str = "",
+    api_key: str = "",
+    teams_url: str = "",
+    sf_update_url: str = "",
+) -> WorkatoTool:
     with patch.multiple(
         "config",
         WORKATO_WEBHOOK_SF_READ=sf_url,
         WORKATO_WEBHOOK_TFS_WRITE=tfs_url,
         WORKATO_API_KEY=api_key,
+        WORKATO_WEBHOOK_TEAMS_NOTIFY=teams_url,
+        WORKATO_WEBHOOK_SF_UPDATE=sf_update_url,
     ):
         return WorkatoTool()
 
@@ -28,6 +36,19 @@ TFS_KWARGS = dict(
     evidence_links=["https://logfire.example.com/trace/abc123"],
     priority="P2",
     linked_sf_case_id="SF-12345",
+)
+
+TEAMS_URL = "https://workato.example.com/teams-notify"
+SF_UPDATE_URL = "https://workato.example.com/sf-update"
+
+TEAMS_KWARGS = dict(
+    case_id="SF-12345",
+    root_cause="MS throttling — sync-worker connector",
+    affected_tenant_count=14,
+    affected_tenant_ids=["tenant-a", "tenant-b"],
+    earliest_occurrence_utc="2026-04-22T09:14:00Z",
+    pattern_confidence="high",
+    conversation_url="http://localhost:8000/api/conversations/abc/messages",
 )
 
 
@@ -194,3 +215,114 @@ def test_build_ticket_body_empty_lists_show_none():
         linked_sf_case_id="SF-0",
     )
     assert "- (none)" in body
+
+
+# ── send_teams_alert ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_send_teams_alert_posts_to_webhook():
+    tool = make_tool(teams_url=TEAMS_URL, api_key=API_KEY)
+    with respx.mock:
+        respx.post(TEAMS_URL).mock(return_value=httpx.Response(200, text='{"ok":true}'))
+        result = await tool.send_teams_alert(**TEAMS_KWARGS)
+    assert "ok" in result
+
+
+@pytest.mark.asyncio
+async def test_send_teams_alert_sends_api_key_header():
+    tool = make_tool(teams_url=TEAMS_URL, api_key=API_KEY)
+    with respx.mock:
+        route = respx.post(TEAMS_URL).mock(return_value=httpx.Response(200, text="ok"))
+        await tool.send_teams_alert(**TEAMS_KWARGS)
+    assert route.calls[0].request.headers["x-api-key"] == API_KEY
+
+
+@pytest.mark.asyncio
+async def test_send_teams_alert_payload_contains_all_fields():
+    tool = make_tool(teams_url=TEAMS_URL, api_key=API_KEY)
+    with respx.mock:
+        route = respx.post(TEAMS_URL).mock(return_value=httpx.Response(200, text="ok"))
+        await tool.send_teams_alert(**TEAMS_KWARGS)
+    import json
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["case_id"] == "SF-12345"
+    assert payload["affected_tenant_count"] == 14
+    assert payload["pattern_confidence"] == "high"
+    assert "conversation_url" in payload
+
+
+@pytest.mark.asyncio
+async def test_send_teams_alert_stub_when_not_configured():
+    tool = make_tool()
+    result = await tool.send_teams_alert(**TEAMS_KWARGS)
+    assert "not configured" in result
+    assert "SF-12345" in result
+    assert "14" in result
+
+
+@pytest.mark.asyncio
+async def test_send_teams_alert_http_error():
+    tool = make_tool(teams_url=TEAMS_URL, api_key=API_KEY)
+    with respx.mock:
+        respx.post(TEAMS_URL).mock(return_value=httpx.Response(500))
+        result = await tool.send_teams_alert(**TEAMS_KWARGS)
+    assert "500" in result
+
+
+@pytest.mark.asyncio
+async def test_send_teams_alert_network_error():
+    tool = make_tool(teams_url=TEAMS_URL, api_key=API_KEY)
+    with respx.mock:
+        respx.post(TEAMS_URL).mock(side_effect=httpx.ConnectError("refused"))
+        result = await tool.send_teams_alert(**TEAMS_KWARGS)
+    assert "Workato unreachable" in result
+
+
+# ── update_salesforce_case_priority ──────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_update_sf_priority_posts_to_webhook():
+    tool = make_tool(sf_update_url=SF_UPDATE_URL, api_key=API_KEY)
+    with respx.mock:
+        respx.post(SF_UPDATE_URL).mock(return_value=httpx.Response(200, text='{"updated":true}'))
+        result = await tool.update_salesforce_case_priority("SF-12345", "P1")
+    assert "updated" in result
+
+
+@pytest.mark.asyncio
+async def test_update_sf_priority_payload_contains_case_id_and_priority():
+    tool = make_tool(sf_update_url=SF_UPDATE_URL, api_key=API_KEY)
+    with respx.mock:
+        route = respx.post(SF_UPDATE_URL).mock(return_value=httpx.Response(200, text="ok"))
+        await tool.update_salesforce_case_priority("SF-12345", "P1")
+    import json
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["case_id"] == "SF-12345"
+    assert payload["priority"] == "P1"
+
+
+@pytest.mark.asyncio
+async def test_update_sf_priority_stub_when_not_configured():
+    tool = make_tool()
+    result = await tool.update_salesforce_case_priority("SF-12345", "P1")
+    assert "not configured" in result
+    assert "SF-12345" in result
+    assert "P1" in result
+
+
+@pytest.mark.asyncio
+async def test_update_sf_priority_http_error():
+    tool = make_tool(sf_update_url=SF_UPDATE_URL, api_key=API_KEY)
+    with respx.mock:
+        respx.post(SF_UPDATE_URL).mock(return_value=httpx.Response(403))
+        result = await tool.update_salesforce_case_priority("SF-12345", "P1")
+    assert "403" in result
+
+
+@pytest.mark.asyncio
+async def test_update_sf_priority_network_error():
+    tool = make_tool(sf_update_url=SF_UPDATE_URL, api_key=API_KEY)
+    with respx.mock:
+        respx.post(SF_UPDATE_URL).mock(side_effect=httpx.ConnectError("timeout"))
+        result = await tool.update_salesforce_case_priority("SF-12345", "P1")
+    assert "Workato unreachable" in result

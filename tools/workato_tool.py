@@ -13,6 +13,8 @@ class WorkatoTool:
         self.sf_read_url = config.WORKATO_WEBHOOK_SF_READ
         self.tfs_write_url = config.WORKATO_WEBHOOK_TFS_WRITE
         self.api_key = config.WORKATO_API_KEY
+        self.teams_notify_url = config.WORKATO_WEBHOOK_TEAMS_NOTIFY
+        self.sf_update_url = config.WORKATO_WEBHOOK_SF_UPDATE
 
     @staticmethod
     def _build_ticket_body(
@@ -98,6 +100,69 @@ class WorkatoTool:
         except httpx.RequestError as e:
             return f"[Workato unreachable — {type(e).__name__}: {e}]"
 
+    async def send_teams_alert(
+        self,
+        case_id: str,
+        root_cause: str,
+        affected_tenant_count: int,
+        affected_tenant_ids: list,
+        earliest_occurrence_utc: str,
+        pattern_confidence: str,
+        conversation_url: str,
+    ) -> str:
+        if not self.teams_notify_url:
+            return (
+                f"[Workato not configured — Teams alert NOT sent. Manual notification required.\n"
+                f"Case: {case_id} | Tenants: {affected_tenant_count} | Confidence: {pattern_confidence}]"
+            )
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.teams_notify_url,
+                    json={
+                        "case_id": case_id,
+                        "root_cause": root_cause,
+                        "affected_tenant_count": affected_tenant_count,
+                        "affected_tenant_ids": affected_tenant_ids,
+                        "earliest_occurrence_utc": earliest_occurrence_utc,
+                        "pattern_confidence": pattern_confidence,
+                        "conversation_url": conversation_url,
+                    },
+                    headers={"x-api-key": self.api_key},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                return response.text
+        except httpx.HTTPStatusError as e:
+            return f"[Workato error — HTTP {e.response.status_code}]"
+        except httpx.RequestError as e:
+            return f"[Workato unreachable — {type(e).__name__}: {e}]"
+
+    async def update_salesforce_case_priority(
+        self,
+        case_id: str,
+        priority: str,
+    ) -> str:
+        if not self.sf_update_url:
+            return (
+                f"[Workato not configured — Salesforce case {case_id} NOT updated. "
+                f"Please manually set priority to {priority}.]"
+            )
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.sf_update_url,
+                    json={"case_id": case_id, "priority": priority},
+                    headers={"x-api-key": self.api_key},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                return response.text
+        except httpx.HTTPStatusError as e:
+            return f"[Workato error — HTTP {e.response.status_code}]"
+        except httpx.RequestError as e:
+            return f"[Workato unreachable — {type(e).__name__}: {e}]"
+
     def as_tools(self) -> list:
         return [
             {
@@ -134,6 +199,48 @@ class WorkatoTool:
                     "required": ["title", "root_cause", "affected_tenants", "evidence_links", "priority", "linked_sf_case_id"],
                 },
             },
+            {
+                "name": "send_teams_alert",
+                "description": (
+                    "Send a platform-wide incident alert to Microsoft Teams via Workato. "
+                    "Call this when smoke-detector confirms a platform_wide_incident. "
+                    "The alert notifies the on-call engineer with a link to this conversation."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "case_id": {"type": "string"},
+                        "root_cause": {"type": "string"},
+                        "affected_tenant_count": {"type": "integer"},
+                        "affected_tenant_ids": {"type": "array", "items": {"type": "string"}},
+                        "earliest_occurrence_utc": {"type": "string"},
+                        "pattern_confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                        "conversation_url": {"type": "string"},
+                    },
+                    "required": [
+                        "case_id", "root_cause", "affected_tenant_count",
+                        "affected_tenant_ids", "earliest_occurrence_utc",
+                        "pattern_confidence", "conversation_url",
+                    ],
+                },
+            },
+            {
+                "name": "update_salesforce_case_priority",
+                "description": (
+                    "Update the priority of a Salesforce support case via Workato. "
+                    "Call this when escalating a confirmed platform-wide incident to P1, "
+                    "BEFORE calling create_tfs_ticket. "
+                    "Extract case_id from the [Salesforce case_id: ...] prefix in the conversation."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "case_id": {"type": "string", "description": "Salesforce case ID, e.g. SF-12345"},
+                        "priority": {"type": "string", "enum": ["P1", "P2", "P3", "P4"]},
+                    },
+                    "required": ["case_id", "priority"],
+                },
+            },
         ]
 
     async def call(self, tool_name: str, tool_input: dict) -> str:
@@ -141,4 +248,8 @@ class WorkatoTool:
             return await self.read_salesforce_case(**tool_input)
         if tool_name == "create_tfs_ticket":
             return await self.create_tfs_ticket(**tool_input)
+        if tool_name == "send_teams_alert":
+            return await self.send_teams_alert(**tool_input)
+        if tool_name == "update_salesforce_case_priority":
+            return await self.update_salesforce_case_priority(**tool_input)
         return f"Unknown tool: {tool_name}"
