@@ -1,5 +1,13 @@
 # LogFire Support Agent
 
+<!-- stack-diagram:start -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/stack-diagram-dark.png">
+  <img alt="logfire-support-agent stack diagram" src="docs/stack-diagram.png">
+</picture>
+<!-- stack-diagram:end -->
+
+
 A chat-based investigation agent for support engineers. Replaces Grafana dashboards with
 plain-language queries against Logfire telemetry. Detects cross-tenant patterns automatically.
 
