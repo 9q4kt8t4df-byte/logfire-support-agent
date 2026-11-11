@@ -14,20 +14,33 @@ plain-language queries against Logfire telemetry. Detects cross-tenant patterns 
 
 - Python 3.11+
 - `logfire-mcp` CLI installed: `pip install logfire-mcp`
-- A Logfire read token with **cross-project scope** (not scoped to a single project)
+- A Logfire read token (see Logfire token scope below)
 - Anthropic API key
 
 ## Setup
 
 ```bash
 # 1. Clone and install
+git clone https://github.com/9q4kt8t4df-byte/logfire-support-agent.git
+cd logfire-support-agent
 pip install -r requirements.txt
 
 # 2. Configure credentials
 cp .env.example .env
 # Edit .env — set ANTHROPIC_API_KEY and LOGFIRE_TOKEN at minimum
 
-# 3. Verify Logfire MCP connection
+# 3. (Optional) Verify the Logfire MCP connection: see the collapsible block below
+
+# 4. Start the server
+uvicorn api.main:app --reload --port 8000
+```
+
+<details>
+<summary>Connection check for step 3</summary>
+
+Run this with `LOGFIRE_TOKEN` exported in your shell.
+
+```bash
 python -c "
 import asyncio, os
 from mcp import ClientSession, StdioServerParameters
@@ -41,10 +54,9 @@ async def check():
             print('Connected. Tools:', [t.name for t in tools.tools])
 asyncio.run(check())
 "
-
-# 4. Start the server
-uvicorn api.main:app --reload --port 8000
 ```
+
+</details>
 
 ## Using the Agent
 
@@ -65,62 +77,68 @@ curl -X POST http://localhost:8000/api/chat \
   -d '{"message": "Check if other tenants are seeing this too", "conversation_id": "<id from previous response>"}'
 ```
 
-## Logfire Token Scope
+The request body fields are `message` (required), `case_id` and `conversation_id` (both optional).
 
-The `LOGFIRE_TOKEN` must have read access across **all tenant projects**, not just one.
-If the token is project-scoped, cross-tenant smoke detection will silently return empty results.
+## Endpoints
 
-To check: in the Logfire dashboard, generate a read token at the organisation level, not the project level.
+- `POST /api/chat` returns `conversation_id`, `response`, `tools_used` and `smoke_alert` (null unless a platform-wide incident was reported). An unknown `conversation_id` returns 404.
+- `GET /api/conversations/{conversation_id}/messages` returns the stored messages (`role`, `content`, `created_at`); 404 for an unknown conversation.
+- `GET /health` returns `{"status": "ok"}`.
 
-## VDI Migration Notes
+## Logfire token scope
 
-When moving from laptop to VDI:
+`LOGFIRE_TOKEN` must be a read token with access across **all tenant projects**, not just one. With a project-scoped token, cross-tenant smoke detection will return empty results. The code does not check the token's scope. Generate the token at the organisation level in the Logfire dashboard.
 
-1. Confirm `logfire-mcp` binary is installed on VDI (`pip install logfire-mcp`)
-2. If `logfire-mcp` is unavailable, switch `LogfireTool.MCP_TOOL_NAME` to use the REST API fallback
-3. Set the same `.env` variables — no code changes required
-4. If VDI proxies outbound HTTPS, add `api.anthropic.com` to the proxy allowlist
-5. SQLite database (`conversations.db`) is local — conversations do not persist across machines
+## Notes for moving to another machine
 
-## Workato Integration (Phase 2)
+- `logfire-mcp` must be on `PATH` (`pip install logfire-mcp`). The Logfire tool launches it as a subprocess; if the binary is missing, queries return an error message that says so.
+- Set the same `.env` variables.
+- `api.anthropic.com` must be reachable for the Anthropic SDK; if outbound HTTPS goes through a proxy, allow it there.
+- Conversations are stored in a local SQLite file (see below), so they do not move between machines.
 
-Add these to `.env` when Workato webhooks are ready:
+## Conversation storage
 
-```
-WORKATO_WEBHOOK_SF_READ=https://apim.workato.com/...
-WORKATO_WEBHOOK_TFS_WRITE=https://apim.workato.com/...
-WORKATO_API_KEY=your-workato-api-key
-```
+`orchestrator/conversation.py` defaults to `sqlite:///conversations.db`, a relative path, so `conversations.db` is created in the directory the server is started from. It is in `.gitignore`.
 
-The agent works without these — it degrades gracefully and produces ticket text for manual creation.
+## Optional integrations
 
-## Teams Alerting + SF Escalation (Phase 3)
+Workato webhooks provide Salesforce, TFS and Teams access. All are optional; set them in `.env`. If a webhook URL is empty, the agent returns a "Workato not configured" message instead of failing (for example, ticket text for manual creation).
 
-Add these to `.env` to enable automatic Teams notifications and Salesforce case escalation:
+| Variable | Default | Enables |
+|---|---|---|
+| `WORKATO_WEBHOOK_SF_READ` | empty | Reading a Salesforce case (`read_salesforce_case`) |
+| `WORKATO_WEBHOOK_SF_UPDATE` | empty | Updating a Salesforce case priority (`update_salesforce_case_priority`) |
+| `WORKATO_WEBHOOK_TFS_WRITE` | empty | Creating a TFS ticket (`create_tfs_ticket`) |
+| `WORKATO_WEBHOOK_TEAMS_NOTIFY` | empty | Teams alert when a platform-wide smoke alert is found |
+| `WORKATO_API_KEY` | empty | Sent as the `x-api-key` header on Workato calls |
+| `CHAT_BASE_URL` | `http://localhost:8000` | Base of the conversation link included in Teams alerts |
 
-```
-WORKATO_WEBHOOK_TEAMS_NOTIFY=https://apim.workato.com/...
-WORKATO_WEBHOOK_SF_UPDATE=https://apim.workato.com/...
-CHAT_BASE_URL=http://your-agent-host:8000
-```
+`SMOKE_THRESHOLD` (default `100`, must be an integer) is also optional; it is used in the supervisor's system prompt. `.env.example` lists only the first three Workato variables with the required ones; the others are read by `config.py`.
 
-All three degrade gracefully if absent — Phase 1/2 functionality is unaffected.
+## Architecture overview
 
-## Architecture Documentation (Phase 4)
+Open `docs/architecture/index.html` in a browser (no server needed) for a visual overview: request flow, agent roles, tool matrix, integrations, data models and escalation flow.
 
-Open `docs/architecture/index.html` in any browser (double-click, no server needed) for a full visual overview of the system: request flow, agent roles, tool matrix, integrations, data models, and escalation flow — all with Mermaid diagrams.
+## Logfire reference
 
-## Logfire Reference
+- Logfire API docs: https://pydantic.dev/docs/logfire/api/logfire/
+- `knowledge/logfire-sdk-reference.md` explains span attributes, error patterns and how instrumentation libraries structure their spans. The investigator agent reads it through the knowledge tool.
 
-The agent queries traces produced by the **Logfire Python SDK**. Key references:
-
-- **Logfire API docs:** https://pydantic.dev/docs/logfire/api/logfire/
-- **Trace & span model:** `knowledge/logfire-sdk-reference.md` — explains span attributes, error patterns, and how instrumentation libraries (FastAPI, Anthropic, httpx) structure their spans. The investigator agent uses this via the KnowledgeTool during investigations.
-
-The `LOGFIRE_TOKEN` must have **organisation-level read scope** (not project-scoped) for cross-tenant smoke detection to work.
-
-## Running Tests
+## Running tests
 
 ```bash
 pytest -v
 ```
+
+`tests/test_workato_tool.py` imports `respx`, which is not listed in `requirements.txt`; run `pip install respx` first. `tests/conftest.py` sets dummy `ANTHROPIC_API_KEY` and `LOGFIRE_TOKEN` values, so no `.env` is needed.
+
+## Repo map
+
+- `api/`: FastAPI app and request/response models
+- `orchestrator/`: chat flow and SQLite conversation store
+- `agents/`: tool-use loop, supervisor, investigator, smoke detector
+- `tools/`: `logfire_tool.py`, `cross_tenant.py`, `knowledge_tool.py`, `workato_tool.py`
+- `knowledge/`: known issues, runbooks, Logfire SDK reference
+- `docs/architecture/`: HTML architecture overview
+- `docs/superpowers/`: design specs and plans from development
+- `config.py`: environment variables and agent definitions
